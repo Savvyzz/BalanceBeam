@@ -1,13 +1,17 @@
 ﻿namespace BalanceBeam.Identity.BusinessLogic.Services
 {
     using BalanceBeam.Identity.Common.CustomExceptions;
+    using BalanceBeam.Identity.Common.Helpers.OTL;
 
     using Microsoft.AspNetCore.Identity;
     using Microsoft.Extensions.Configuration;
     using Microsoft.IdentityModel.Tokens;
 
+    using OpenTelemetry.Trace;
+
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IdentityModel.Tokens.Jwt;
     using System.Security.Claims;
     using System.Text;
@@ -30,107 +34,220 @@
         /// <inheritdoc />
         public async Task<string> Login(string userName, string password)
         {
-            try
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Sign in"))
             {
-                IdentityUser<int>? existingUser = await _userManager.FindByNameAsync(userName);
-
-                if (existingUser == null || !await _userManager.CheckPasswordAsync(existingUser, password))
+                try
                 {
-                    throw new UnauthorizedAccessException("Invalid login credentials");
+                    var tags = new ActivityTagsCollection
+                    {
+                        { OTLHelper.AttributeUserName, userName }
+                    };
+
+                    IdentityUser<int>? existingUser = await _userManager.FindByNameAsync(userName);
+
+                    if (existingUser == null || !await _userManager.CheckPasswordAsync(existingUser, password))
+                    {
+                        activity?.AddEvent(
+                            new ActivityEvent(
+                                "User sign in failed. User not found or credential missmatch",
+                                DateTimeOffset.UtcNow,
+                                tags)
+                            );
+
+                        throw new UnauthorizedAccessException("Invalid login credentials");
+                    }
+
+                    var token = await GenerateJwtToken(existingUser);
+
+                    activity?.AddEvent(new ActivityEvent("User signed in", DateTimeOffset.UtcNow, tags));
+
+                    return token;
                 }
+                catch (Exception ex)
+                {
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
 
-                var token = await GenerateJwtToken(existingUser);
+                    activity?.RecordException(ex, tags);
 
-                return token;
-            } 
-            catch(Exception ex)
-            {
-                // TODO: Add tracing
-                throw new UserSignInFailedException(ex.Message, ex);
+                    throw new UserSignInFailedException(ex.Message, ex);
+                }
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> Register(string email, string userName, string password)
         {
-            try
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Register"))
             {
-                IdentityUser<int>? existingUserByEmail = await _userManager.FindByEmailAsync(email);
-                IdentityUser<int>? existingUserByUsername = await _userManager.FindByNameAsync(userName);
-
-                if (existingUserByEmail != null || existingUserByUsername != null)
+                try
                 {
-                    throw new UserAlreadyExistsException();
+                    var tags = new ActivityTagsCollection
+                    {
+                        { OTLHelper.AttributeUserName, userName },
+                        { OTLHelper.AttributeUserEmail, email }
+                    };
+
+                    IdentityUser<int>? existingUserByEmail = await _userManager.FindByEmailAsync(email);
+                    IdentityUser<int>? existingUserByUsername = await _userManager.FindByNameAsync(userName);
+
+                    if (existingUserByEmail != null || existingUserByUsername != null)
+                    {
+                        activity?.AddEvent(
+                            new ActivityEvent(
+                                "User registration failed. User already exists with the provided username, and or email.", 
+                                DateTimeOffset.UtcNow, 
+                                tags)
+                            );
+
+                        throw new UserAlreadyExistsException();
+                    }
+
+                    var user = new IdentityUser<int>()
+                    {
+                        UserName = userName,
+                        Email = email
+                    };
+
+                    IdentityResult result = await _userManager.CreateAsync(user, password);
+
+                    if (!result.Succeeded)
+                    {
+                        tags.Add(OTLHelper.AttributeRegisterFailed, result.Errors);
+
+                        activity?.AddEvent(new ActivityEvent("User not registered", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    activity?.AddEvent(new ActivityEvent("User registered", DateTimeOffset.UtcNow, tags));
+
+                    return true;
                 }
-
-                var user = new IdentityUser<int>()
+                catch (Exception ex)
                 {
-                    UserName = userName,
-                    Email = email
-                };
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
 
-                IdentityResult result = await _userManager.CreateAsync(user, password);
+                    activity?.RecordException(ex, tags);
 
-                if (!result.Succeeded)
-                {
-                    return false;
+                    throw new UserRegistrationFailedException(ex.Message, ex);
                 }
-
-                return true;
-            } 
-            catch(Exception ex)
-            {
-                // TODO: Add tracing
-                throw new UserRegistrationFailedException(ex.Message, ex);
             }
         }
 
         /// <inheritdoc />
-        public async Task<IdentityUser<int>> UpdateUser(IdentityUser<int> user)
+        public async Task<bool> UpdateUser(IdentityUser<int> user)
         {
-            try
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Update user info"))
             {
-                IdentityUser<int>? existingUser = await _userManager.FindByNameAsync(user.UserName);
-
-                if (existingUser == null)
+                try
                 {
-                    throw new UserNotFoundException();
+                    var tags = new ActivityTagsCollection()
+                    {
+                        { OTLHelper.AttributeUserName, user.UserName },
+                        { OTLHelper.AttributeUserEmail, user.Email },
+                        { OTLHelper.AttributeUserId, user.Id },
+                    };
+
+                    IdentityUser<int>? existingUser = await _userManager.FindByNameAsync(user.UserName);
+
+                    if (existingUser == null)
+                    {
+                        activity?.AddEvent(new ActivityEvent("User does not exist", DateTimeOffset.UtcNow, tags));
+
+                        throw new UserNotFoundException();
+                    }
+
+                    IdentityResult result = await _userManager.UpdateAsync(user);
+
+                    if (!result.Succeeded)
+                    {
+                        tags.Add(OTLHelper.AttributeUpdateFailed, result.Errors);
+
+                        activity?.AddEvent(new ActivityEvent("User update failed", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    activity?.AddEvent(new ActivityEvent("User updated successfully", DateTimeOffset.UtcNow, tags));
+
+                    return true;
                 }
-
-                IdentityResult updateInfo = await _userManager.UpdateAsync(user);
-
-                if (!updateInfo.Succeeded)
+                catch (Exception ex)
                 {
-                    throw new UserUpdateFailedException(updateInfo.Errors.ToString());
-                }
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
 
-                return user;
-            } 
-            catch(Exception ex)
-            {
-                // TODO: Add tracing
-                throw new UserUpdateFailedException(ex.Message, ex);
+                    activity?.RecordException(ex, tags);
+
+                    throw new UserUpdateFailedException(ex.Message, ex);
+                }
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> ChangeUserPassword(string userName, string currentPassword, string newPassword)
         {
-            IdentityUser<int>? user = await _userManager.FindByNameAsync(userName);
-
-            if (user == null)
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Change user password"))
             {
-                return false;
+                try
+                {
+                    var tags = new ActivityTagsCollection
+                    {
+                        { OTLHelper.AttributeUserName, userName }
+                    };
+
+                    IdentityUser<int>? user = await _userManager.FindByNameAsync(userName);
+
+                    if (user == null)
+                    {
+                        activity?.AddEvent(new ActivityEvent("User does not exist", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    IdentityResult result = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+
+                    if (!result.Succeeded)
+                    {
+                        tags.Add(OTLHelper.AttributeUpdateFailed, result.Errors);
+
+                        activity?.AddEvent(new ActivityEvent("Change user password failed", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    activity?.AddEvent(new ActivityEvent("Change user password successfull", DateTimeOffset.UtcNow, tags));
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
+
+                    activity?.RecordException(ex, tags);
+
+                    throw new ChangeUserPasswordException(ex.Message, ex);
+                }
             }
-
-            IdentityResult result = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
-
-            if (!result.Succeeded)
-            {
-                return false;
-            }
-
-            return true;
         }
 
         /// <summary>
@@ -140,24 +257,58 @@
         /// <returns>A JWT token for the signed in user</returns>
         private async Task<string> GenerateJwtToken(IdentityUser<int> user)
         {
-            var claims = new List<Claim>
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Generate JWT"))
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
-            };
+                try
+                {
+                    var tags = new ActivityTagsCollection
+                    {
+                        { OTLHelper.AttributeUserEmail, user.Email },
+                        { OTLHelper.AttributeUserName, user.UserName },
+                    };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+                    var claims = new List<Claim>
+                    {
+                        new Claim(JwtRegisteredClaimNames.Sub, user.Email),
+                        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+                    };
 
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(double.Parse(_configuration["Jwt:DurationInMinutes"])),
-                signingCredentials: creds);
+                    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+                    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+                    var token = new JwtSecurityToken(
+                        issuer: _configuration["Jwt:Issuer"],
+                        audience: _configuration["Jwt:Audience"],
+                        claims: claims,
+                        expires: DateTime.Now.AddMinutes(double.Parse(_configuration["Jwt:DurationInMinutes"])),
+                        signingCredentials: creds);
+
+                    if(token == null)
+                    {
+                        activity?.AddEvent(new ActivityEvent("JWT token not generated for user", DateTimeOffset.UtcNow, tags));
+
+                        throw new CreateJwtException("Token not created");
+                    }
+
+                    activity?.AddEvent(new ActivityEvent("JWT token generated for user", DateTimeOffset.UtcNow, tags));
+
+                    return new JwtSecurityTokenHandler().WriteToken(token);
+                }
+                catch (Exception ex)
+                {
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
+
+                    activity?.RecordException(ex, tags);
+
+                    throw new CreateJwtException(ex.Message, ex);
+                }
+            }
         }
     }
 }

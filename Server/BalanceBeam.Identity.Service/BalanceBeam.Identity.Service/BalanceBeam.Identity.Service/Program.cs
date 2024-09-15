@@ -1,9 +1,13 @@
 using BalanceBeam.Identity.BusinessLogic.Services;
 using BalanceBeam.Identity.DataAccess.DbContext;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+
+using OpenTelemetry.Trace;
+
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +41,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
+    });
+
+// Telemetry
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        tracing.AddHttpClientInstrumentation();
+        tracing.AddSource(builder.Environment.ApplicationName);
+        tracing.AddOtlpExporter(otlpOptions =>
+        {
+            otlpOptions.Endpoint = new Uri(builder.Configuration["OTLP_ENDPOINT_URL"]);
+        });
     });
 
 // Register DI

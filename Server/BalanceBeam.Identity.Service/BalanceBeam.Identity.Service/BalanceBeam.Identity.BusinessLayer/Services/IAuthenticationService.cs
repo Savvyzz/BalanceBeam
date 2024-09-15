@@ -22,7 +22,7 @@
         /// </summary>
         /// <param name="user">The <see cref="IdentityUser"/></param>
         /// <returns></returns>
-        public Task<IdentityUser<int>> UpdateUser(IdentityUser<int> user);
+        public Task<bool> UpdateUser(IdentityUser<int> user);
 
         /// <summary>
         /// Sings in a user
