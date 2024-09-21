@@ -1,0 +1,21 @@
+version: '3.4'
+
+services:
+  balancebeam.identity.service:
+    image: ${DOCKER_REGISTRY-}balancebeamidentityservice
+    build:
+      context: .
+      dockerfile: BalanceBeam.Identity.Service/Dockerfile
+    depends_on:
+      - SQLServerIdentityDb
+
+  SQLServerIdentityDb:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - SA_PASSWORD=SuperPassword123
+      - ACCEPT_EULA=Y
+    volumes:
+      - dbdata:/var/opt/mssql
+
+volumes:
+  dbdata:

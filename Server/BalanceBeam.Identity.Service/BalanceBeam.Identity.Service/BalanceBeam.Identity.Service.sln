@@ -11,6 +11,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BalanceBeam.Identity.Busine
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BalanceBeam.Identity.Common", "BalanceBeam.Identity.Common\BalanceBeam.Identity.Common.csproj", "{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}"
 EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{E00561C8-0A96-4DC8-BCF7-64D318665186}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E00561C8-0A96-4DC8-BCF7-64D318665186}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E00561C8-0A96-4DC8-BCF7-64D318665186}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E00561C8-0A96-4DC8-BCF7-64D318665186}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E00561C8-0A96-4DC8-BCF7-64D318665186}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

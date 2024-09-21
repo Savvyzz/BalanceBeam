@@ -76,10 +76,13 @@ app.UseAuthentication();
 
 app.MapControllers();
 
-using (var scope = app.Services.CreateScope())
+if(app.Environment.IsDevelopment())
 {
-    var db = scope.ServiceProvider.GetRequiredService<IdentityDataContext>();
-    db.Database.Migrate();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<IdentityDataContext>();
+        db.Database.Migrate();
+    }
 }
 
 app.Run();
