@@ -9,7 +9,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BalanceBeam.Identity.DataAc
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BalanceBeam.Identity.BusinessLogic", "BalanceBeam.Identity.BusinessLayer\BalanceBeam.Identity.BusinessLogic.csproj", "{299C3FEA-9A16-4F41-82EC-88843209ED7C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BalanceBeam.Identity.Common", "BalanceBeam.Identity.Common\BalanceBeam.Identity.Common.csproj", "{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BalanceBeam.Identity.Common", "BalanceBeam.Identity.Common\BalanceBeam.Identity.Common.csproj", "{B15FC92E-B158-4AA5-B9EB-CEC4ECB0ECFB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
