@@ -63,7 +63,7 @@
 
                     return token;
                 }
-                catch (Exception ex)
+                catch (UnauthorizedAccessException ex)
                 {
                     var tags = new TagList
                     {
@@ -255,7 +255,7 @@
         /// </summary>
         /// <param name="user">The <see cref="IdentityUser"/></param>
         /// <returns>A JWT token for the signed in user</returns>
-        private async Task<string> GenerateJwtToken(IdentityUser<int> user)
+        public async Task<string> GenerateJwtToken(IdentityUser<int> user)
         {
             using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Generate JWT"))
             {
