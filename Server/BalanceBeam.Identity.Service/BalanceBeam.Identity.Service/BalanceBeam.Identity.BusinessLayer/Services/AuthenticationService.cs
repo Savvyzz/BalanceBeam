@@ -15,6 +15,7 @@
     using System.IdentityModel.Tokens.Jwt;
     using System.Security.Claims;
     using System.Text;
+    using System.Text.Json;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -24,11 +25,13 @@
     {
         private readonly UserManager<IdentityUser<int>> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly IMessageService _messageService;
 
-        public AuthenticationService(UserManager<IdentityUser<int>> userManager, IConfiguration configuration)
+        public AuthenticationService(UserManager<IdentityUser<int>> userManager, IConfiguration configuration, IMessageService messageService)
         {
             _userManager = userManager;
             _configuration = configuration;
+            _messageService = messageService;
         }
 
         /// <inheritdoc />
@@ -123,6 +126,16 @@
 
                         return false;
                     }
+
+                    var message = new
+                    {
+                        Email = email,
+                        UserName = userName,
+                    };
+
+                    var serializedMessage = JsonSerializer.Serialize(message);
+
+                    await _messageService.SendEmailMessage(serializedMessage);
 
                     activity?.AddEvent(new ActivityEvent("User registered", DateTimeOffset.UtcNow, tags));
 

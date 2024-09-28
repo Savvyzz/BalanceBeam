@@ -1,13 +1,16 @@
 using BalanceBeam.Identity.BusinessLogic.Services;
+using BalanceBeam.Identity.Common.Options;
 using BalanceBeam.Identity.DataAccess.DbContext;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 using OpenTelemetry.Trace;
-
+using RabbitMQ.Client;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -56,8 +59,24 @@ builder.Services.AddOpenTelemetry()
         });
     });
 
+// RabbitMQ
+builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
+
 // Register DI
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+builder.Services.AddSingleton<IAsyncConnectionFactory>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<RabbitMQOptions>>().Value;
+    return new ConnectionFactory
+    {
+        HostName = options.HostName,
+        UserName = options.UserName,
+        Password = options.Password
+    };
+});
+
+builder.Services.AddSingleton<IMessageService, MessageService>();
 
 var app = builder.Build();
 
