@@ -40,5 +40,13 @@
         /// <param name="newPassword">The user's new password</param>
         /// <returns></returns>
         public Task<bool> ChangeUserPassword(string userName, string currentPassword, string newPassword);
+
+        /// <summary>
+        /// Confirms the email for the new registered user
+        /// </summary>
+        /// <param name="userId">The user id</param>
+        /// <param name="token">The confirm email token</param>
+        /// <returns>True if success otherwise false</returns>
+        public Task<bool> ConfirmEmail(string userName, string token);
     }
 }

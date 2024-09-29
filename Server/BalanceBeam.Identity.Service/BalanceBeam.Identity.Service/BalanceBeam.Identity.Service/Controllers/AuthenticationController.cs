@@ -35,7 +35,7 @@
             return new CreatedResult(this.Url.ToString(), userRegistered);
         }
 
-        [HttpPost("signin")]
+        [HttpPost("sign-in")]
         public async Task<IActionResult> SignIn(SignInUserDto userDto)
         {
             string token = await _authenticationService.Login(userDto.UserName, userDto.Password);
@@ -43,7 +43,7 @@
             return Ok(new { Token = token });
         }
 
-        [HttpPut("modifyuser")]
+        [HttpPut("modify-user")]
         public async Task<IActionResult> UpdateUser(ModifyUserDto userDto)
         {
             var user = new IdentityUser<int>()
@@ -63,7 +63,7 @@
             return new CreatedResult(this.Url.ToString(), userUpdated);
         }
 
-        [HttpPut("changepassword")]
+        [HttpPut("change-password")]
         public async Task<IActionResult> ChangeUserPassword(ChangeUserPasswordDto userDto)
         {
             bool passwordChanged = await _authenticationService.ChangeUserPassword(userDto.UserName, userDto.CurrentPassword, userDto.NewPassword);
@@ -74,6 +74,19 @@
             }
 
             return Ok(passwordChanged);
+        }
+
+        [HttpPost("confirm-email/{userName}/{token}")]
+        public async Task<IActionResult> ConfirmUserEmail(string userName, string token)
+        {
+            bool emailConfirmed = await _authenticationService.ConfirmEmail(userName, token);
+
+            if (!emailConfirmed)
+            {
+                return BadRequest("Could not confirm user email");
+            }
+
+            return Ok(emailConfirmed);
         }
     }
 }

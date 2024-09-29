@@ -1,8 +1,9 @@
 ﻿namespace BalanceBeam.Identity.BusinessLogic.Services
 {
+    using BalanceBeam.Identity.Common.Contracts;
     using BalanceBeam.Identity.Common.CustomExceptions;
     using BalanceBeam.Identity.Common.Helpers.OTL;
-
+    using MassTransit;
     using Microsoft.AspNetCore.Identity;
     using Microsoft.Extensions.Configuration;
     using Microsoft.IdentityModel.Tokens;
@@ -17,6 +18,7 @@
     using System.Text;
     using System.Text.Json;
     using System.Threading.Tasks;
+    using System.Web;
 
     /// <summary>
     /// The authentication service
@@ -25,13 +27,13 @@
     {
         private readonly UserManager<IdentityUser<int>> _userManager;
         private readonly IConfiguration _configuration;
-        private readonly IMessageService _messageService;
+        private readonly IPublishEndpoint _publishEndpoint;
 
-        public AuthenticationService(UserManager<IdentityUser<int>> userManager, IConfiguration configuration, IMessageService messageService)
+        public AuthenticationService(UserManager<IdentityUser<int>> userManager, IConfiguration configuration, IPublishEndpoint publishEndpoint)
         {
             _userManager = userManager;
             _configuration = configuration;
-            _messageService = messageService;
+            _publishEndpoint = publishEndpoint;
         }
 
         /// <inheritdoc />
@@ -127,15 +129,13 @@
                         return false;
                     }
 
-                    var message = new
-                    {
-                        Email = email,
-                        UserName = userName,
-                    };
+                    string token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
-                    var serializedMessage = JsonSerializer.Serialize(message);
+                    string encodedToken = HttpUtility.UrlEncode(token);
 
-                    await _messageService.SendEmailMessage(serializedMessage);
+                    var message = new UserRegisteredEvent(userName, email, encodedToken);
+
+                    await _publishEndpoint.Publish(message);
 
                     activity?.AddEvent(new ActivityEvent("User registered", DateTimeOffset.UtcNow, tags));
 
@@ -259,6 +259,60 @@
                     activity?.RecordException(ex, tags);
 
                     throw new ChangeUserPasswordException(ex.Message, ex);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ConfirmEmail(string userName, string token)
+        {
+            using (var activity = new ActivitySource(OTLHelper.ActivitySource).StartActivity("Confirm Email"))
+            {
+                try
+                {
+                    var tags = new ActivityTagsCollection
+                    {
+                        { OTLHelper.AttributeUserName, userName }
+                    };
+
+                    IdentityUser<int>? user = await _userManager.FindByNameAsync(userName);
+
+                    if (user == null)
+                    {
+                        activity?.AddEvent(new ActivityEvent("User does not exist", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    string decodedToken = HttpUtility.UrlDecode(token);
+
+                    IdentityResult result = await _userManager.ConfirmEmailAsync(user, decodedToken);
+
+                    if (!result.Succeeded)
+                    {
+                        tags.Add(OTLHelper.AttributeUpdateFailed, result.Errors);
+
+                        activity?.AddEvent(new ActivityEvent("Confirm email failed", DateTimeOffset.UtcNow, tags));
+
+                        return false;
+                    }
+
+                    activity?.AddEvent(new ActivityEvent("Confirm email successfull", DateTimeOffset.UtcNow, tags));
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    var tags = new TagList
+                    {
+                        { OTLHelper.AttributeExceptionMessage, ex.Message },
+                        { OTLHelper.AttributeExceptionType, ex.GetType().FullName },
+                        { OTLHelper.AttributeExceptionStacktrace, ex.StackTrace }
+                    };
+
+                    activity?.RecordException(ex, tags);
+
+                    throw new ConfirmUserEmailException(ex.Message, ex);
                 }
             }
         }

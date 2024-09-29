@@ -1,7 +1,7 @@
 using BalanceBeam.Identity.BusinessLogic.Services;
 using BalanceBeam.Identity.Common.Options;
 using BalanceBeam.Identity.DataAccess.DbContext;
-
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -55,28 +55,29 @@ builder.Services.AddOpenTelemetry()
         tracing.AddSource(builder.Environment.ApplicationName);
         tracing.AddOtlpExporter(otlpOptions =>
         {
-            otlpOptions.Endpoint = new Uri(builder.Configuration["OTLP_ENDPOINT_URL"]);
+            otlpOptions.Endpoint = new Uri(builder.Configuration["OTLP_ENDPOINT_URL"]!);
         });
     });
 
-// RabbitMQ
-builder.Services.Configure<RabbitMQOptions>(builder.Configuration.GetSection("RabbitMQ"));
+// Mass Transit RabbitMQ
+builder.Services.AddMassTransit(busConfiguratior =>
+{
+    busConfiguratior.SetKebabCaseEndpointNameFormatter();
+
+    busConfiguratior.UsingRabbitMq((context, configurator) =>
+    {
+        configurator.Host(builder.Configuration["RabbitMQ:HostName"]!, h =>
+        {
+            h.Username(builder.Configuration["RabbitMQ:UserName"]!);
+            h.Password(builder.Configuration["RabbitMQ:Password"]!);
+        });
+
+        configurator.ConfigureEndpoints(context);
+    });
+});
 
 // Register DI
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-
-builder.Services.AddSingleton<IAsyncConnectionFactory>(sp =>
-{
-    var options = sp.GetRequiredService<IOptions<RabbitMQOptions>>().Value;
-    return new ConnectionFactory
-    {
-        HostName = options.HostName,
-        UserName = options.UserName,
-        Password = options.Password
-    };
-});
-
-builder.Services.AddSingleton<IMessageService, MessageService>();
 
 var app = builder.Build();
 

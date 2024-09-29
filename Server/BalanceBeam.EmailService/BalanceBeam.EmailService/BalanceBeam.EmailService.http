@@ -1,0 +1,6 @@
+@BalanceBeam.EmailService_HostAddress = http://localhost:5133
+
+GET {{BalanceBeam.EmailService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
